@@ -1,29 +1,30 @@
+import * as acorn from 'acorn';
+import { Node } from 'estree';
+import { evaluate } from './evaluate';
+import { Scope, ScopeType } from './scope';
+import * as fs from 'fs';
+import * as path from 'path';
 
-class Test {
-	private _a: number = 0;
-	private _b: number = 0;
+export function customEval(code: string, scope: Scope = new Scope(ScopeType.Global)) {
+	const node = acorn.parse(code, { ecmaVersion: 6 });
 
-	set a(v: number) {
-		console.log('set a');
-		this._a = v;
+	const baseApi: Record<string, any> = {
+		console,
+		require,
+		module: {
+			exports: {},
+		}
+	};
+
+	for (const [name, value] of Object.entries(baseApi)) {
+		const variable = scope.declare('var', name);
+		variable.value = value;
 	}
 
-	get a() {
-		console.log('get a');
-		return this._a;
-	}
-
-	set b(v: number) {
-		console.log('set b');
-		this._b = v;
-	}
-
-	get b() {
-		console.log('get b');
-		return this._b;
-	}
+	evaluate(node as Node, scope);
+	return scope.get('module')?.value;
 }
 
-const test = new Test();
+const TestCode = fs.readFileSync(path.join(__dirname, '../test-code.js'), 'utf-8');
 
-test.a += test.b;
+customEval(TestCode);

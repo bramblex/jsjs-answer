@@ -326,7 +326,7 @@ export function step(co: Coroutine) {
 						co.leaveWhile(ctx.tmpResult, nextContext, function () {
 							const first = co.stack.top();
 							return first.node.type === 'TryStatement' && first.context.next < 1
-						}); 
+						});
 						return;
 				}
 				throw new Error('Unexpected Error');

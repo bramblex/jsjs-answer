@@ -24,7 +24,7 @@ export class Variable {
 
 	set value(_value) {
 		this.init = true;
-		this.value = _value;
+		this._value = _value;
 	}
 
 	constructor(name: string, kind: Kind) {
