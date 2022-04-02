@@ -65,37 +65,6 @@ module.exports = a;
   });
 });
 
-test("VariableDeclaration-duplicate-with-context-let", t => {
-  const scope = new Scope({
-    global: "hello"
-  });
-
-  t.throws(function() {
-    customEval(
-      `
-let global = "world"
-module.exports = global;
-      `,
-      scope
-    );
-  });
-});
-
-test("VariableDeclaration-duplicate-with-context-const", t => {
-  const scope = new Scope({
-    global: "hello"
-  });
-
-  t.throws(function() {
-    customEval(
-      `
-let global = "world"
-module.exports = global;
-      `,
-      scope
-    );
-  });
-});
 
 test("VariableDeclaration-define let then cover", t => {
   const scope = new Scope({});
