@@ -1,5 +1,5 @@
 
-var Test = function(text) {
+var Test = function (text) {
   if (text) {
     var o = JSON.parse(text);
     this.id = o.id;
