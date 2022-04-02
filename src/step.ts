@@ -7,7 +7,19 @@ import { traverse } from './traverse';
 
 function cast<T extends {}>(ctx: any): asserts ctx is T { }
 
-function hoistingBlock(node: BlockStatement | Program | SwitchCase, scope: Scope) {
+function hoistingFunctions(body: Statement[]) {
+	return [...body].sort((a, b) => {
+		if (a.type === 'FunctionDeclaration' && b.type !== 'FunctionDeclaration') {
+			return -1;
+		} else if (a.type !== 'FunctionDeclaration' && b.type === 'FunctionDeclaration') {
+			return 1;
+		} else {
+			return 0;
+		}
+	});
+}
+
+function hoistingBlockScope(node: BlockStatement | Program | SwitchCase, scope: Scope) {
 	let body: Statement[];
 	if (node.type === 'BlockStatement') {
 		body = node.body;
@@ -24,11 +36,10 @@ function hoistingBlock(node: BlockStatement | Program | SwitchCase, scope: Scope
 			}
 		}
 	}
-	return node;
 }
 
-function hoistingFunction(node: Node, scope: Scope) {
-	traverse(function (node: Node, ctx, next) {
+function hoistingFunctionScope(node: Node, scope: Scope) {
+	return traverse(function (node: Node, ctx, next) {
 		switch (node.type) {
 			case 'VariableDeclaration': {
 				const kind = node.kind;
@@ -41,7 +52,7 @@ function hoistingFunction(node: Node, scope: Scope) {
 				return node;
 			}
 			case 'FunctionDeclaration': {
-				scope.declare('var', (node.id as Identifier).name);
+				const variable = scope.declare('var', (node.id as Identifier).name);
 				return node;
 			}
 			case 'FunctionExpression':
@@ -92,7 +103,7 @@ export function step(co: Coroutine) {
 						variable.value = args[i];
 					}
 
-					hoistingFunction(node.body, scope);
+					hoistingFunctionScope(node.body, funcScope);
 
 					if (node.async) {
 						return asyncEvaluate(node.body, funcScope);
@@ -108,14 +119,12 @@ export function step(co: Coroutine) {
 				}
 
 				Object.defineProperties(func, {
-					length: { writable: false, value: node.params.length }
+					length: { writable: false, value: node.params.length },
+					name: {
+						writable: false,
+						value: node.type === 'FunctionExpression' && node?.id?.name || "",
+					}
 				})
-
-				if (node.type === 'FunctionExpression') {
-					Object.defineProperties(func, {
-						name: { writable: false, value: node?.id?.name }
-					});
-				}
 
 				co.leave(func); return;
 			}
@@ -171,23 +180,24 @@ export function step(co: Coroutine) {
 
 			case 'Program':
 			case 'BlockStatement': {
-				cast<{ i: number, blockScope: Scope }>(ctx);
+				cast<{ i: number, body: Statement[], blockScope: Scope }>(ctx);
 				switch (ctx.next) {
 					case 0:
 						ctx.i = 0;
 						ctx.blockScope = new Scope(ScopeType.Block, scope);
 						if (node.type === 'Program') {
-							hoistingFunction(node, ctx.blockScope);
+							hoistingFunctionScope(node, ctx.blockScope);
 						} else {
-							hoistingBlock(node, ctx.blockScope);
+							hoistingBlockScope(node, ctx.blockScope);
 						}
+						ctx.body = hoistingFunctions(node.body as Statement[]);
 					case 1:
-						co.enter(node.body[ctx.i], {}, ctx.blockScope); ctx.next = 2; return;
-					case 2:
-						if (ctx.i < node.body.length - 1) {
-							ctx.i++; ctx.next = 1; return;
+						if (ctx.i < ctx.body.length) {
+							co.enter(ctx.body[ctx.i], {}, ctx.blockScope); ctx.next = 2; return;
 						}
 						co.leave(); return;
+					case 2:
+						ctx.i++; ctx.next = 1; return;
 				}
 				throw new Error('Unexpected Error');
 			}
@@ -203,7 +213,7 @@ export function step(co: Coroutine) {
 			case 'LabeledStatement': {
 				switch (ctx.next) {
 					case 0:
-						co.enter(node.body); return;
+						co.enter(node.body); ctx.next = 1; return;
 					case 1:
 						co.leave(); return;
 				}
@@ -273,7 +283,7 @@ export function step(co: Coroutine) {
 						ctx.matched = false;
 						ctx.blockScope = new Scope(ScopeType.Block, scope);
 						for (const switchCase of node.cases) {
-							hoistingBlock(switchCase, ctx.blockScope);
+							hoistingBlockScope(switchCase, ctx.blockScope);
 						}
 						co.enter(node.discriminant, {}); ctx.next = 1; return;
 					case 1:
@@ -287,7 +297,7 @@ export function step(co: Coroutine) {
 								matched: ctx.matched,
 							}, ctx.blockScope); ctx.next = 2; return;
 						}
-						co.leave(undefined, { matched: ctx.matched });
+						co.leave(undefined, { matched: ctx.matched }); return;
 				}
 				throw new Error('Unexpected Error');
 			}
@@ -300,8 +310,9 @@ export function step(co: Coroutine) {
 						if (!ctx.matched && node.test) {
 							co.enter(node.test); ctx.next = 1; return;
 						}
+						ctx.matched = true;
 					case 1:
-						ctx.matched || ctx.tmpResult === ctx.discriminant;
+						ctx.matched = ctx.matched || ctx.tmpResult === ctx.discriminant;
 						if (!ctx.matched) {
 							co.leave(); return;
 						}
@@ -311,7 +322,7 @@ export function step(co: Coroutine) {
 							ctx.i++;
 							co.enter(stat); ctx.next = 2; return;
 						}
-						co.leave(undefined, { matched: ctx.matched });
+						co.leave(undefined, { matched: ctx.matched }); return;
 				}
 				throw new Error('Unexpected Error');
 			}
@@ -436,6 +447,7 @@ export function step(co: Coroutine) {
 						if (node.test) {
 							co.enter(node.test, ctx.blockScope); ctx.next = 2; return;
 						}
+						ctx.tmpResult = true;
 					case 2:
 						if (!ctx.tmpResult) {
 							co.leave(); return;
@@ -511,6 +523,10 @@ export function step(co: Coroutine) {
 
 			// 表达式
 			case 'Identifier': {
+				if (node.name === 'undefined') {
+					co.leave(undefined); return;
+				};
+
 				const variable = scope.get(node.name);
 				if (!variable) {
 					throw new ReferenceError(`${node.name} is not defined`);
@@ -526,7 +542,7 @@ export function step(co: Coroutine) {
 			}
 
 			case 'ThisExpression': {
-				const { value } = scope.get('this') || { value: null };
+				const { value } = scope.get('this') || { value: undefined };
 				co.leave(value); return;
 			}
 
@@ -537,19 +553,18 @@ export function step(co: Coroutine) {
 						ctx.i = 0;
 						ctx.array = [];
 					case 1:
-						const element = node.elements[ctx.i];
-						if (element) {
-							co.enter(element); ctx.next = 2; return;
-						} else {
+						if (ctx.i < node.elements.length) {
+							const element = node.elements[ctx.i];
+							if (element) {
+								co.enter(element); ctx.next = 2; return;
+							}
 							ctx.tmpResult = null;
+						} else {
+							co.leave(ctx.array); return;
 						}
 					case 2:
 						ctx.array.push(ctx.tmpResult);
-						if (ctx.i < node.elements.length - 1) {
-							ctx.i++;
-							ctx.next = 1; return;
-						}
-						co.leave(ctx.array); return;
+						ctx.i++; ctx.next = 1; return;
 				}
 				throw new Error('Unexpected Error');
 			}
@@ -562,24 +577,28 @@ export function step(co: Coroutine) {
 						ctx.i = 0;
 						ctx.object = {};
 					case 1:
-						property = node.properties[ctx.i] as Property;
-						if (!property.computed && property.key.type === "Identifier") {
-							ctx.tmpResult = property.key.name;
+						if (ctx.i < node.properties.length) {
+							property = node.properties[ctx.i] as Property;
+							if (!property.computed && property.key.type === "Identifier") {
+								ctx.tmpResult = property.key.name;
+							} else {
+								co.enter(property.key); ctx.next = 2; return;
+							}
 						} else {
-							co.enter(property.key); ctx.next = 2; return;
+							co.leave(ctx.object); return;
 						}
 					case 2:
 						ctx.key = ctx.tmpResult;
 						property = node.properties[ctx.i] as Property;
-						co.enter(property.value); ctx.next = 3; return;
+						const nextNode = { ...property.value } as FunctionExpression;
+						if (property.method) {
+							nextNode.id = property.key as Identifier;
+						}
+						co.enter(nextNode); ctx.next = 3; return;
 					case 3:
 						const value = ctx.tmpResult;
 						ctx.object[ctx.key] = value;
-						if (ctx.i < node.properties.length - 1) {
-							ctx.i++;
-							ctx.next = 1; return;
-						}
-						co.leave(ctx.object); return;
+						ctx.i++; ctx.next = 1; return;
 				}
 				throw new Error('Unexpected Error');
 			}
@@ -591,7 +610,7 @@ export function step(co: Coroutine) {
 							if (node.operator === 'typeof') {
 								const variable = scope.get(node.argument.name);
 								if (!variable) {
-									co.leave(undefined); return;
+									co.leave('undefined'); return;
 								}
 							} else if (node.operator === 'delete') {
 								const variable = scope.get('this');
@@ -610,6 +629,7 @@ export function step(co: Coroutine) {
 							case '!': co.leave(!argument); return;
 							case '~': co.leave(~argument); return;
 							case 'typeof': co.leave(typeof argument); return;
+							case 'void': co.leave(void argument); return;
 							case 'delete':
 								if (tmpMember) {
 									delete tmpMember.object[tmpMember.property]
@@ -664,6 +684,7 @@ export function step(co: Coroutine) {
 							case '+': co.leave(left + right); return;
 							case '-': co.leave(left - right); return;
 							case '*': co.leave(left * right); return;
+							case '**': co.leave(left ** right); return;
 							case '/': co.leave(left / right); return;
 							case '%': co.leave(left % right); return;
 							case '|': co.leave(left | right); return;

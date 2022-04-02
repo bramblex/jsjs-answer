@@ -23,6 +23,9 @@ export class Variable {
 	}
 
 	set value(_value) {
+		if (this.kind === 'const' && this.init) {
+			throw new TypeError(`Assignment to constant variable.`)
+		}
 		this.init = true;
 		this._value = _value;
 	}
@@ -47,19 +50,24 @@ export class Scope {
 
 	private getNearFunctionOrGlobalScope() {
 		let scope: Scope = this;
-		while (scope.parent) {
+		while (true) {
 			if (scope.type === ScopeType.Function
 				|| scope.type === ScopeType.Global) {
 				return scope;
 			}
-			scope = scope.parent;
+			if (scope.parent) {
+				scope = scope.parent;
+			} else {
+				break;
+			}
 		}
 		throw new Error('Can not find function or global scope');
 	}
 
 	declare(kind: Kind, name: string) {
-		const variable = this.get(name) || new Variable(name, kind);
-		this.content.set(name, variable);
+		let scope = kind !== 'var' ? this : this.getNearFunctionOrGlobalScope();
+		const variable = scope.content.get(name) || new Variable(name, kind);
+		scope.content.set(name, variable);
 		return variable;
 	}
 

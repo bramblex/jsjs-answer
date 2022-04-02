@@ -17,6 +17,7 @@ export function customEval(code: string, scope: Scope = new Scope(ScopeType.Glob
 		setTimeout,
 		clearTimeout,
 		Promise,
+		JSON,
 	};
 
 	for (const [name, value] of Object.entries(baseApi)) {
@@ -25,9 +26,5 @@ export function customEval(code: string, scope: Scope = new Scope(ScopeType.Glob
 	}
 
 	evaluate(node as Node, scope);
-	return scope.get('module')?.value;
+	return scope.get('module')?.value.exports;
 }
-
-const TestCode = fs.readFileSync(path.join(__dirname, '../test-code.js'), 'utf-8');
-
-customEval(TestCode);
