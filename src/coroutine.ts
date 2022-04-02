@@ -79,7 +79,7 @@ export class Coroutine {
 	}
 
 	leaveWhile(value: any, context: {}, func: (co: Coroutine) => boolean) {
-		while (!func(this)) {
+		while (!this.done && !this.error && !this.halt && !func(this)) {
 			this.leave(value, context);
 		}
 	}

@@ -5,7 +5,11 @@ import { step } from './step';
 
 export function evaluate(node: Node, scope: Scope = new Scope(ScopeType.Global)) {
 	const co = new Coroutine(node, scope);
-	return co.resume(null, step);
+	const result = co.resume(null, step);
+	if (co.error) {
+		throw co.result;
+	}
+	return result;
 }
 
 export function generatorEvaluate(node: Node, scope: Scope = new Scope(ScopeType.Global)) {

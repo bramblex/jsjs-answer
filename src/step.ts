@@ -24,6 +24,7 @@ function hoistingBlock(node: BlockStatement | Program | SwitchCase, scope: Scope
 			}
 		}
 	}
+	return node;
 }
 
 function hoistingFunction(node: Node, scope: Scope) {
@@ -37,11 +38,11 @@ function hoistingFunction(node: Node, scope: Scope) {
 						scope.declare(kind, name);
 					}
 				}
-				return;
+				return node;
 			}
 			case 'FunctionDeclaration': {
 				scope.declare('var', (node.id as Identifier).name);
-				return;
+				return node;
 			}
 			case 'FunctionExpression':
 			case 'ArrowFunctionExpression': {
@@ -103,7 +104,7 @@ export function step(co: Coroutine) {
 				}
 
 				func.toString = function toString() {
-					return astring.generate(node.body);
+					return astring.generate(node);
 				}
 
 				Object.defineProperties(func, {
@@ -142,7 +143,7 @@ export function step(co: Coroutine) {
 						}
 					case 1:
 						const nextContext = {
-							next: 3,
+							next: 2,
 							returnStatement: {
 								type: 'ReturnStatement',
 								argument: { type: 'Literal', value: ctx.tmpResult }
@@ -150,7 +151,8 @@ export function step(co: Coroutine) {
 						}
 						co.leaveWhile(ctx.tmpResult, nextContext, function () {
 							const first = co.stack.top();
-							return first.node.type === 'TryStatement' && first.context.next < 2
+							cast<{ state: number }>(first.context);
+							return first.node.type === 'TryStatement' && first.context.state < 2
 						}); return;
 				}
 				throw new Error('Unexpected Error');
@@ -320,32 +322,40 @@ export function step(co: Coroutine) {
 						co.enter(node.argument); ctx.next = 1; return;
 					case 1:
 						const nextContext = {
-							next: 2,
+							next: 1,
 							exception: ctx.tmpResult,
 						}
 						co.leaveWhile(ctx.tmpResult, nextContext, function () {
 							const first = co.stack.top();
-							return first.node.type === 'TryStatement' && first.context.next < 1
+							cast<{ state: number }>(first.context);
+							return first.node.type === 'TryStatement' && first.context.state < 1;
 						});
+						if (co.done) {
+							co.error = true;
+						}
 						return;
 				}
 				throw new Error('Unexpected Error');
 			}
 
 			case 'TryStatement': {
-				cast<{ exception: any, returnStatement?: ReturnStatement }>(ctx);
+				cast<{ state: number, exception: any, returnStatement?: ReturnStatement }>(ctx);
 				switch (ctx.next) {
 					case 0:
+						ctx.state = 0;
 						co.enter(node.block); ctx.next = 2; return;
 					case 1:
+						ctx.state = 1;
 						if (node.handler) {
 							co.enter(node.handler, { exception: ctx.exception }); ctx.next = 2; return;
 						}
 					case 2:
+						ctx.state = 2;
 						if (node.finalizer) {
 							co.enter(node.finalizer); ctx.next = 3; return;
 						}
 					case 3:
+						ctx.state = 3;
 						if (ctx.returnStatement) {
 							co.enter(ctx.returnStatement); ctx.next = 4; return;
 						}
@@ -476,11 +486,12 @@ export function step(co: Coroutine) {
 
 			case 'VariableDeclaration': {
 				cast<{ i: number }>(ctx);
+				let d;
 				switch (ctx.next) {
 					case 0:
 						ctx.i = 0;
 					case 1:
-						let d = node.declarations[ctx.i];
+						d = node.declarations[ctx.i];
 						if (d.init) {
 							co.enter(d.init); ctx.next = 2; return;
 						}
@@ -493,6 +504,7 @@ export function step(co: Coroutine) {
 						if (ctx.i < node.declarations.length - 1) {
 							ctx.i++; ctx.next = 1; return;
 						}
+						co.leave(); return;
 				}
 				throw new Error('Unexpected Error');
 			}
@@ -544,12 +556,13 @@ export function step(co: Coroutine) {
 
 			case 'ObjectExpression': {
 				cast<{ i: number, object: any, key: any }>(ctx);
+				let property;
 				switch (ctx.next) {
 					case 0:
 						ctx.i = 0;
 						ctx.object = {};
 					case 1:
-						let property = node.properties[ctx.i] as Property;
+						property = node.properties[ctx.i] as Property;
 						if (!property.computed && property.key.type === "Identifier") {
 							ctx.tmpResult = property.key.name;
 						} else {
@@ -789,7 +802,7 @@ export function step(co: Coroutine) {
 			}
 		}
 	} catch (exception) {
-		co.throw(exception);
+		co.throw(exception); return;
 	};
 	throw new Error('Unsupported Syntax');
 }

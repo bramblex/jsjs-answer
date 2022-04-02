@@ -3,9 +3,9 @@ import { VariableDeclaration } from "estree";
 type Kind = VariableDeclaration['kind'];
 
 export enum ScopeType {
-	Global,
-	Function,
-	Block,
+	Global = 1,
+	Function = 2,
+	Block = 3,
 }
 
 export class Variable {

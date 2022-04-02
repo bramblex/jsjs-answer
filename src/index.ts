@@ -6,14 +6,17 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 export function customEval(code: string, scope: Scope = new Scope(ScopeType.Global)) {
-	const node = acorn.parse(code, { ecmaVersion: 6 });
+	const node = acorn.parse(code, { ecmaVersion: 'latest' });
 
 	const baseApi: Record<string, any> = {
 		console,
 		require,
 		module: {
 			exports: {},
-		}
+		},
+		setTimeout,
+		clearTimeout,
+		Promise,
 	};
 
 	for (const [name, value] of Object.entries(baseApi)) {
