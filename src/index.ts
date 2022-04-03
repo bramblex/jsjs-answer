@@ -1,9 +1,7 @@
 import * as acorn from 'acorn';
-import { Node } from 'estree';
 import { evaluate } from './evaluate';
 import { Scope, ScopeType } from './scope';
-import * as fs from 'fs';
-import * as path from 'path';
+import { CustomNode, hoistingTransform } from './hoisting';
 
 export function customEval(code: string, scope: Scope = new Scope(ScopeType.Global)) {
   const node = acorn.parse(code, { ecmaVersion: 'latest' });
@@ -25,6 +23,8 @@ export function customEval(code: string, scope: Scope = new Scope(ScopeType.Glob
     variable.value = value;
   }
 
-  evaluate(node as Node, scope);
+  evaluate(
+    hoistingTransform(node as CustomNode),
+    scope);
   return scope.get('module')?.value.exports;
 }

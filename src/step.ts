@@ -1,70 +1,12 @@
 import * as astring from 'astring';
-import { Node, ArrayExpression, FunctionExpression, Identifier, Property, VariableDeclaration, BlockStatement, Program, SwitchCase, Statement } from 'estree';
+import { ArrayExpression, FunctionExpression, Identifier, Property, VariableDeclaration, BlockStatement, Program, SwitchCase, Statement } from 'estree';
 import { Coroutine } from './coroutine';
 import { asyncEvaluate, evaluate, generatorEvaluate } from './evaluate';
+import { CustomNode, hoist } from './hoisting';
 import { Scope, ScopeType, Variable } from './scope';
 import { traverse } from './traverse';
 
 function cast<T extends {}>(ctx: any): asserts ctx is T { }
-
-function hoistingFunctions(body: Statement[]) {
-  return [...body].sort((a, b) => {
-    if (a.type === 'FunctionDeclaration' && b.type !== 'FunctionDeclaration') {
-      return -1;
-    } else if (a.type !== 'FunctionDeclaration' && b.type === 'FunctionDeclaration') {
-      return 1;
-    } else {
-      return 0;
-    }
-  });
-}
-
-function hoistingBlockScope(node: BlockStatement | Program | SwitchCase, scope: Scope) {
-  let body: Statement[];
-  if (node.type === 'BlockStatement') {
-    body = node.body;
-  } else if (node.type === 'Program') {
-    body = node.body as Statement[];
-  } else {
-    body = node.consequent;
-  }
-  for (const stat of body) {
-    if (stat.type === 'VariableDeclaration' && stat.kind !== 'var') {
-      for (const d of stat.declarations) {
-        const name = (d.id as Identifier).name;
-        scope.declare(stat.kind, name);
-      }
-    }
-  }
-}
-
-function hoistingFunctionScope(node: Node, scope: Scope) {
-  return traverse(function (node: Node, ctx, next) {
-    switch (node.type) {
-      case 'VariableDeclaration': {
-        const kind = node.kind;
-        if (kind === 'var') {
-          for (const d of node.declarations) {
-            const name = (d.id as Identifier).name;
-            scope.declare(kind, name);
-          }
-        }
-        return node;
-      }
-      case 'FunctionDeclaration': {
-        const variable = scope.declare('var', (node.id as Identifier).name);
-        return node;
-      }
-      case 'FunctionExpression':
-      case 'ArrowFunctionExpression': {
-        return node;
-      }
-      default: {
-        return next(node, ctx);
-      }
-    }
-  })(node, null)
-}
 
 export function step(co: Coroutine) {
   const { node, scope, context: ctx } = co.current();
@@ -103,7 +45,7 @@ export function step(co: Coroutine) {
             variable.value = args[i];
           }
 
-          hoistingFunctionScope(node.body, funcScope);
+          hoist(node, funcScope);
 
           if (node.async) {
             return asyncEvaluate(node.body, funcScope);
@@ -184,13 +126,8 @@ export function step(co: Coroutine) {
         switch (ctx.next) {
           case 0:
             ctx.i = 0;
-            ctx.blockScope = new Scope(ScopeType.Block, scope);
-            if (node.type === 'Program') {
-              hoistingFunctionScope(node, ctx.blockScope);
-            } else {
-              hoistingBlockScope(node, ctx.blockScope);
-            }
-            ctx.body = hoistingFunctions(node.body as Statement[]);
+            ctx.blockScope = ctx.blockScope || new Scope(ScopeType.Block, scope);
+            hoist(node, scope);
           case 1:
             if (ctx.i < ctx.body.length) {
               co.enter(ctx.body[ctx.i], {}, ctx.blockScope); ctx.next = 2; return;
@@ -223,10 +160,12 @@ export function step(co: Coroutine) {
       case 'BreakStatement': {
         const label = node.label?.name;
         co.leaveWhile(undefined, {}, function (co) {
+
           const first = co.stack.top();
           if (label) {
             return first.node.type === 'LabeledStatement' && first.node.label.name === label;
           }
+
           return [
             'ForStatement',
             'ForInStatement',
@@ -282,9 +221,7 @@ export function step(co: Coroutine) {
             ctx.i = 0;
             ctx.matched = false;
             ctx.blockScope = new Scope(ScopeType.Block, scope);
-            for (const switchCase of node.cases) {
-              hoistingBlockScope(switchCase, ctx.blockScope);
-            }
+            hoist(node, ctx.blockScope);
             co.enter(node.discriminant, {}); ctx.next = 1; return;
           case 1:
             ctx.discriminant = ctx.tmpResult;
@@ -381,7 +318,7 @@ export function step(co: Coroutine) {
         switch (ctx.next) {
           case 0:
             const blockScope = new Scope(ScopeType.Block, scope);
-            const variable = blockScope.declare('var', (node.param as Identifier).name);
+            const variable = blockScope.declare('var', (node.param as Identifier).name, true);
             variable.value = ctx.exception;
             co.enter(node.body, {}, blockScope); ctx.next = 1; return;
           case 1:

@@ -1,4 +1,4 @@
-import { Node } from "estree";
+import { CustomNode } from "./hoisting";
 import { Scope, Variable } from "./scope";
 
 export interface Context {
@@ -12,11 +12,11 @@ export interface Context {
 }
 
 export class StackFrame {
-  public readonly node: Node;
+  public readonly node: CustomNode;
   public readonly scope: Scope;
   public readonly context: Context;
 
-  constructor(node: Node, scope: Scope) {
+  constructor(node: CustomNode, scope: Scope) {
     this.node = node;
     this.scope = scope;
     this.context = { next: 0, tmpResult: undefined };
@@ -52,8 +52,8 @@ export class Coroutine {
 
   public readonly stack: Stack = new Stack();
 
-  constructor(node: Node, scope: Scope) {
-    this.enter(node, {}, scope);
+  constructor(node: CustomNode, context: {}, scope: Scope) {
+    this.enter(node, context, scope);
   }
 
   throw(exception: any) {
@@ -63,7 +63,7 @@ export class Coroutine {
     });
   }
 
-  enter(node: Node, context: {} = {}, scope: Scope = this.stack.top().scope) {
+  enter(node: CustomNode, context: {} = {}, scope: Scope = this.stack.top().scope) {
     const frame = new StackFrame(node, scope);
     Object.assign(frame.context, context);
     this.stack.push(frame);

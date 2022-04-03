@@ -1,10 +1,10 @@
-import { Node } from 'estree';
 import { Scope, ScopeType } from './scope';
 import { Coroutine } from "./coroutine";
 import { step } from './step';
+import { CustomNode } from './hoisting';
 
-export function evaluate(node: Node, scope: Scope = new Scope(ScopeType.Global)) {
-  const co = new Coroutine(node, scope);
+export function evaluate(node: CustomNode, scope: Scope = new Scope(ScopeType.Global)) {
+  const co = new Coroutine(node, { blockScope: scope }, scope);
   const result = co.resume(null, step);
   if (co.error) {
     throw co.result;
@@ -12,8 +12,8 @@ export function evaluate(node: Node, scope: Scope = new Scope(ScopeType.Global))
   return result;
 }
 
-export function generatorEvaluate(node: Node, scope: Scope = new Scope(ScopeType.Global)) {
-  const co = new Coroutine(node, scope);
+export function generatorEvaluate(node: CustomNode, scope: Scope = new Scope(ScopeType.Global)) {
+  const co = new Coroutine(node, { blockScope: scope }, scope);
   let done = false;
 
   return {
@@ -45,7 +45,7 @@ export function generatorEvaluate(node: Node, scope: Scope = new Scope(ScopeType
   };
 }
 
-export function asyncEvaluate(node: Node, scope: Scope = new Scope(ScopeType.Global)) {
+export function asyncEvaluate(node: CustomNode, scope: Scope = new Scope(ScopeType.Global)) {
   return new Promise((resolve, reject) => {
     const gen = generatorEvaluate(node, scope);
 
