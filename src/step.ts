@@ -1,5 +1,5 @@
 import * as astring from 'astring';
-import { Node, ArrayExpression, FunctionExpression, Identifier, Property, ReturnStatement, VariableDeclaration, BlockStatement, Program, SwitchCase, Statement } from 'estree';
+import { Node, ArrayExpression, FunctionExpression, Identifier, Property, VariableDeclaration, BlockStatement, Program, SwitchCase, Statement } from 'estree';
 import { Coroutine } from './coroutine';
 import { asyncEvaluate, evaluate, generatorEvaluate } from './evaluate';
 import { Scope, ScopeType, Variable } from './scope';
@@ -153,7 +153,7 @@ export function step(co: Coroutine) {
           case 1:
             const nextContext = {
               next: 2,
-              returnStatement: {
+              defer: {
                 type: 'ReturnStatement',
                 argument: { type: 'Literal', value: ctx.tmpResult }
               }
@@ -350,7 +350,7 @@ export function step(co: Coroutine) {
       }
 
       case 'TryStatement': {
-        cast<{ state: number, exception: any, returnStatement?: ReturnStatement }>(ctx);
+        cast<{ state: number, exception: any, defer?: Statement }>(ctx);
         switch (ctx.next) {
           case 0:
             ctx.state = 0;
@@ -367,8 +367,8 @@ export function step(co: Coroutine) {
             }
           case 3:
             ctx.state = 3;
-            if (ctx.returnStatement) {
-              co.enter(ctx.returnStatement); ctx.next = 4; return;
+            if (ctx.defer) {
+              co.enter(ctx.defer); ctx.next = 4; return;
             }
           case 4:
             co.leave(); return;
