@@ -45,14 +45,20 @@ export function hoistingTransform(root: CustomNode): CustomNode {
 
     // 创建环境
     switch (node.type) {
-      case 'BlockStatement':
       case 'ForStatement':
       case 'ForInStatement': {
-        const hoisting: Hoisting = { var: ctx.var, let: [], const: [] };
-        next(node, hoisting);
-        (node as CustomNode).hoisting = hoisting;
+        next(node, { var: ctx.var, let: [], const: [] });
         return node;
       }
+
+      case 'SwitchStatement':
+      case 'BlockStatement': {
+        const hoisting: Hoisting = { var: ctx.var, let: [], const: [] };
+        next(node, hoisting);
+        (node as CustomNode).hoisting = { ...hoisting, var: [] };
+        return node;
+      }
+
       case 'Program':
       case 'FunctionDeclaration':
       case 'FunctionExpression':

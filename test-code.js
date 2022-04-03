@@ -1,15 +1,27 @@
 
-var Test = function (text) {
-  if (text) {
-    var o = JSON.parse(text);
-    this.id = o.id;
-    this.list = o.list;
-  } else {
-    this.id = '';
-    this.list = [];
+hello();
+
+function hello() {
+}
+
+for (let i = 0; i < 10; i++) {
+  const i = 123;
+  var fuck;
+
+  function test() {
   }
-};
+}
 
-var test = new Test('{"id":1,"list":[1, 2, 3]}');
-
-module.exports = { test, Test }
+function testSwitch() {
+  switch (1) {
+    case 1:
+      let test123 = 123;
+    case 2:
+      var switchVar;
+    case 3:
+      const switchtest3 = 123;
+      function testSwitchFunc() {
+      }
+    case 4:
+  }
+}

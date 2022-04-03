@@ -122,15 +122,15 @@ export function step(co: Coroutine) {
 
       case 'Program':
       case 'BlockStatement': {
-        cast<{ i: number, body: Statement[], blockScope: Scope }>(ctx);
+        cast<{ i: number, blockScope: Scope }>(ctx);
         switch (ctx.next) {
           case 0:
             ctx.i = 0;
             ctx.blockScope = ctx.blockScope || new Scope(ScopeType.Block, scope);
             hoist(node, scope);
           case 1:
-            if (ctx.i < ctx.body.length) {
-              co.enter(ctx.body[ctx.i], {}, ctx.blockScope); ctx.next = 2; return;
+            if (ctx.i < node.body.length) {
+              co.enter(node.body[ctx.i], {}, ctx.blockScope); ctx.next = 2; return;
             }
             co.leave(); return;
           case 2:
@@ -450,6 +450,7 @@ export function step(co: Coroutine) {
             if (d.init) {
               v.value = ctx.tmpResult;
             }
+            v.init = true;
             if (ctx.i < node.declarations.length - 1) {
               ctx.i++; ctx.next = 1; return;
             }
